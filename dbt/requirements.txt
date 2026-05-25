@@ -1,0 +1,5 @@
+dbt-postgres==1.7.9
+pytest
+testcontainers
+psycopg2-binary
+protobuf<5

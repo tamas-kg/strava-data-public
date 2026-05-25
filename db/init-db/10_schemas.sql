@@ -1,0 +1,5 @@
+CREATE SCHEMA IF NOT EXISTS strava_bronze;
+
+CREATE SCHEMA IF NOT EXISTS strava_silver;
+
+CREATE SCHEMA IF NOT EXISTS strava_gold;

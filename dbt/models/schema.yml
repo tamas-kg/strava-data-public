@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: activity
+    description: "Processed activities from bronze"
+    columns:
+      - name: id
+        description: "Activity ID"
+        tests:
+          - not_null
+          - unique
+      - name: name
+        description: "Activity name"
+        tests:
+          - not_null
+      - name: start_date
+        description: "Activity start date"
+        tests:
+          - not_null
+      - name: activity_type
+        description: "Type of activity"
+        tests:
+          - not_null
+
+  - name: lap
+    description: "Activity lap splits"
+    columns:
+      - name: id
+        description: "Lap ID"
+        tests:
+          - not_null
+          - unique
+      - name: activity_id
+        description: "Parent activity ID"
+        tests:
+          - not_null
+
+  - name: monthly_stats
+    description: "Aggregated monthly statistics"
+    columns:
+      - name: year
+        description: "Year of the stats"
+        tests:
+          - not_null
+      - name: month
+        description: "Month of the stats"
+        tests:
+          - not_null

@@ -1,0 +1,10 @@
+services:
+  etl-test:
+    user: "${UID}:${GID}"
+    group_add:
+      - "${DOCKER_GID}"
+
+  dbt-test:
+    user: "${UID}:${GID}"
+    group_add:
+      - "${DOCKER_GID}"

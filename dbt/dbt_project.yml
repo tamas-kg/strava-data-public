@@ -1,0 +1,14 @@
+name: strava_analytics
+version: 1.0
+profile: strava_profile
+
+model-paths: ["models"]
+
+models:
+  strava_analytics:
+    silver:
+      schema: strava_silver
+      materialized: incremental
+    gold:
+      schema: strava_gold
+      materialized: table

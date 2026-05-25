@@ -1,0 +1,11 @@
+streamlit
+psycopg2-binary
+sqlalchemy
+pandas
+numpy
+plotly
+folium
+altair
+streamlit-extras
+requests
+python-dotenv

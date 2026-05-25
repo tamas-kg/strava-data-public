@@ -1,0 +1,274 @@
+services:
+  db:
+    build:
+      context: ./db
+    image: strava-postgis:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    networks:
+      - proxy
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  streamlit:
+    build:
+      context: ./streamlit
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.streamlit.rule=Host(`streamlit.local`)"
+      - "traefik.http.routers.streamlit.entrypoints=websecure"
+      - "traefik.http.routers.streamlit.tls=true"
+      - "traefik.http.routers.streamlit.middlewares=gzip@file,secure-headers@file"
+      - "traefik.http.services.streamlit.loadbalancer.server.port=8501"
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  jupyter:
+    build:
+      context: ./jupyter
+    restart: unless-stopped
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.jupyter.rule=Host(`jupyter.local`)"
+      - "traefik.http.routers.jupyter.entrypoints=websecure"
+      - "traefik.http.routers.jupyter.tls=true"
+      - "traefik.http.routers.jupyter.middlewares=gzip@file,secure-headers@file"
+      - "traefik.http.services.jupyter.loadbalancer.server.port=8888"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DBT_PROFILES_DIR: /dbt
+    volumes:
+      - ./notebooks:/home/jovyan/work
+      - ./dbt:/dbt
+      - ./jupyter/config:/home/jovyan/.jupyter
+      - ./jupyter/data:/home/jovyan/.local
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - dev
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  airflow-db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${AIRFLOW_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_DB}
+    volumes:
+      - airflow_postgres_data:/var/lib/postgresql/data
+    networks:
+      - proxy
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    depends_on:
+      airflow-db:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "devkey"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "False"
+      PYTHONDONTWRITEBYTECODE: "1"
+    user: "0:0"
+    networks:
+      - proxy
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+    command:
+      - bash
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/dags
+        chown -R 50000:0 /opt/airflow/logs /opt/airflow/dags
+
+        airflow db migrate
+
+        airflow users list | grep -q example || airflow users create \
+          --username example \
+          --password example \
+          --firstname example \
+          --lastname User \
+          --role example \
+          --email example@example.com
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "true"
+      AIRFLOW__WEBSERVER__SECRET_KEY: "devkey"
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "False"
+      PYTHONDONTWRITEBYTECODE: "1"
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      - "traefik.http.routers.airflow.rule=Host(`airflow.local`)"
+      - "traefik.http.routers.airflow.entrypoints=websecure"
+      - "traefik.http.routers.airflow.tls=true"
+      - "traefik.http.routers.airflow.middlewares=gzip@file,secure-headers@file"
+      - "traefik.http.services.airflow.loadbalancer.server.port=8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    networks:
+      - proxy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-db:5432/airflow
+      AIRFLOW__LOGGING__REMOTE_LOGGING: "False"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./airflow/dags:/opt/airflow/dags
+      - airflow_logs:/opt/airflow/logs
+    command: scheduler
+
+  etl:
+    build:
+      context: ./etl
+    restart: unless-stopped
+    command: tail -f /dev/null
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
+    networks:
+      - proxy
+    volumes:
+      - ./etl/tokens.json:/app/tokens.json
+
+  dbt:
+    build:
+      context: ./dbt
+    restart: unless-stopped
+    command: tail -f /dev/null
+    environment:
+      DBT_PROFILES_DIR: /app
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - proxy
+    volumes:
+      - ./dbt:/app
+
+  etl-test:
+    build:
+      context: ./etl
+    command: pytest tests --rootdir=/app --cov=src
+    environment:
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - proxy
+    volumes:
+        - ./etl:/app
+        - /var/run/docker.sock:/var/run/docker.sock
+    profiles:
+        - test
+
+  dbt-test:
+    build:
+      context: ./dbt
+    command: pytest tests/test_dbt_integration.py
+    environment:
+      DBT_PROFILES_DIR: /app
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - proxy
+    volumes:
+      - ./dbt:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    profiles:
+        - test
+
+volumes:
+  postgres_data:
+  airflow_postgres_data:
+  airflow_logs:
+
+networks:
+  proxy:
+    external: true

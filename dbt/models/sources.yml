@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: strava_bronze
+    tables:
+      - name: activities_detailed
+      - name: activities
+      - name: starred_segments
