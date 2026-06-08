@@ -26,6 +26,7 @@ Built for local-first development on Apple Silicon (M5 Mac) and deployed to Rasp
 | Airflow          | Workflow orchestration and scheduling    |
 | ETL              | Strava ingestion and transformation jobs |
 | dbt              | SQL modeling and transformations         |
+| fastapi          | Backend service                          |
 
 ---
 
@@ -45,6 +46,7 @@ strava-data/
 ├── airflow/
 ├── jupyter/
 └── streamlit/
+└── fastapi/
 ```
 
 ---
@@ -202,10 +204,9 @@ Future deployment target:
 
 ## Phase 1 — Backend Foundation
 
-* [ ] Add FastAPI service
-* [ ] Add async Postgres access
+* [*] Add FastAPI service
 * [ ] Add Redis service
-* [ ] Move Streamlit to API consumption
+* [*] Move Streamlit to API consumption
 
 ## Phase 2 — Async Workloads
 
@@ -242,9 +243,3 @@ Future deployment target:
 * Docker-first workflow before Kubernetes
 
 ---
-
-# Notes
-
-This project intentionally prioritizes architectural clarity and iterative development over premature infrastructure complexity.
-
-Kubernetes, external HTTPS, and authentication are planned once the internal service architecture stabilizes.
