@@ -1,5 +1,4 @@
 streamlit
-psycopg2-binary
 sqlalchemy
 pandas
 numpy
@@ -8,4 +7,3 @@ folium
 altair
 streamlit-extras
 requests
-python-dotenv

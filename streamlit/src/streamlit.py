@@ -1,4 +1,3 @@
-from src.postgres_db import PostgresDB
 import streamlit as st
 from streamlit_extras.metric_cards import style_metric_cards
 import numpy as np
@@ -9,16 +8,17 @@ import folium
 from streamlit.components.v1 import html as st_html
 import altair as alt
 import decimal
+import requests
 
 class StreamlitDash:
-    def __init__(self, db: PostgresDB):
-        self.db = db
 
     def get_segment_data(self) -> DataFrame:
         if 'segment_data' not in st.session_state:
-            data, colnames = self.db.retrieve_segment_effort_data()
 
-            df = pd.DataFrame(data, columns=colnames)
+            response = requests.get("http://api:8000/segments/efforts")
+            data = response.json()
+            df = pd.DataFrame(data)
+
             df['start_date'] = pd.to_datetime(df['start_date'], utc=True)
             df['elapsed_time'] = pd.to_timedelta(df['elapsed_time'])
 
@@ -45,17 +45,21 @@ class StreamlitDash:
     
     def get_map_data(self) -> DataFrame:
         if 'map_data' not in st.session_state:
-            data, colnames = self.db.retrieve_map_data()
 
-            df = pd.DataFrame(data, columns=colnames)
+            response = requests.get("http://api:8000/routes")
+            data = response.json()
+            df = pd.DataFrame(data)
+
             st.session_state.map_data = df
         return st.session_state.map_data
     
     def get_monthly_data(self) -> DataFrame:
-        if 'monthly_data' not in st.session_state:
-            data, colnames = self.db.retrieve_gold_monthly()
+        if 'monthly_data' not in st.session_state:  
 
-            df = pd.DataFrame(data, columns=colnames)
+            response = requests.get("http://api:8000/stats/monthly")
+            data = response.json()
+            df = pd.DataFrame(data)
+
             st.session_state.monthly_data = df
         return st.session_state.monthly_data
         

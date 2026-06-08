@@ -2,6 +2,6 @@ fastapi
 uvicorn[standard]
 sqlalchemy
 asyncpg
-psycopg[binary]
+psycopg2-binary
 redis[hiredis]
 pydantic-settings
