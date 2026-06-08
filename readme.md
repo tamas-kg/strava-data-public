@@ -204,9 +204,9 @@ Future deployment target:
 
 ## Phase 1 — Backend Foundation
 
-* [*] Add FastAPI service
+* [.] Add FastAPI service
 * [ ] Add Redis service
-* [*] Move Streamlit to API consumption
+* [.] Move Streamlit to API consumption
 
 ## Phase 2 — Async Workloads
 
